@@ -46,6 +46,8 @@ Llegas de noche a sus tierras con una linterna. Saca las morrocotas, no dejes qu
 
 Hecho en HTML, CSS y JavaScript, sin librerías externas.
 
+¿Quieres hacer el tuyo? Los 7 prompts exactos que les dimos a las tres IA están en [PROMPTS.md](PROMPTS.md).
+
 ---
 
 Este juego lo hicimos para un video de MenteXYZ: tres inteligencias artificiales trabajando juntas. El código lo escribió Claude completo (no le cambiamos ni una línea); las imágenes las dibujó ChatGPT, salvo nuestra mascota. La leyenda de Juan Machete es tradición oral de los Llanos Orientales de Colombia y tiene varias versiones.
