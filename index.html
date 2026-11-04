@@ -186,14 +186,38 @@ function spr(k,x,y,h,o,c){
   else fallback(c,k,h);
   c.restore();
 }
+// personaje con piernas animadas: el cuerpo queda fijo y la parte de abajo
+// de la misma imagen se divide en dos mitades (una por pierna) que se mueven por turnos.
+// an = {ph:fase, run:bool, hip:fracción de altura donde empiezan las piernas, lift:px, ang:rad}
+function chr(k,x,y,h,o,c,an){
+  c=c||ctx;
+  if(!an||!ready(k))return spr(k,x,y,h,o,c);
+  const img=IM[k],iw=img.naturalWidth,ih=img.naturalHeight,w=h*iw/ih,hf=an.hip;
+  const front=k.endsWith('frente')||k.endsWith('espalda');
+  const s=Math.sin(an.ph),f=an.run?1.5:1;
+  const hy=ih*hf,uh=h*hf,lh=h-uh,sw=iw/2;
+  c.save();
+  if(o&&o.a!==undefined)c.globalAlpha=o.a;
+  c.translate(x,y);
+  for(let i=0;i<2;i++){
+    c.save();
+    c.translate(0,-lh);
+    if(front)c.translate(0,-Math.max(0,i?-s:s)*an.lift*f);   // de frente/espalda: cada pierna se levanta por turnos
+    else c.rotate((i?-1:1)*s*an.ang*f);                        // de lado: las piernas se abren y cierran como tijera
+    c.drawImage(img,i*sw,hy,sw,ih-hy,i?0:-w/2,0,w/2,lh);
+    c.restore();
+  }
+  c.drawImage(img,0,0,iw,hy+1,-w/2,-h,w,uh+h/ih);              // tronco, encima de las piernas
+  c.restore();
+}
 // silueta de color (para ver a la mascota detrás de palmas y matas)
-function silhouette(k,x,y,h,col,alpha){
-  const w=Math.ceil(h*asp(k))+8,hh=Math.ceil(h)+8,q=Math.max(1,Z);
+function silhouette(k,x,y,h,col,alpha,an){
+  const w=Math.ceil(h*asp(k))+8+Math.ceil(h*0.5),hh=Math.ceil(h)+8,q=Math.max(1,Z);
   sil.width=Math.ceil(w*q);sil.height=Math.ceil(hh*q);
   sctx.setTransform(q,0,0,q,0,0);
   sctx.clearRect(0,0,w,hh);
   sctx.globalCompositeOperation='source-over';
-  spr(k,w/2,hh-4,h,null,sctx);
+  chr(k,w/2,hh-4,h,null,sctx,an);
   sctx.globalCompositeOperation='source-in';
 
   sctx.fillStyle=col;sctx.fillRect(0,0,w,hh);
@@ -370,8 +394,8 @@ function newGame(){
   const jx=(Math.random()<0.5?0.2:0.8)*W,jy=H*0.55;
   S={
     t:0,coins:0,palms,matas,ent,exit,seen:false,
-    P:{x:spawn.x,y:spawn.y,dir:'frente',ang:Math.PI/2,stam:100,tired:false,slow:0,moving:false,run:false,stepT:0,digT:0},
-    J:{x:jx,y:jy,dir:'frente',state:'patrol',wpx:jx,wpy:jy,pause:2,last:{x:jx,y:jy},lost:0,cast:0,fireCd:5,stepT:0,wait:0,sleep:10,alert:0,slowT:0},
+    P:{x:spawn.x,y:spawn.y,dir:'frente',ang:Math.PI/2,stam:100,tired:false,slow:0,moving:false,run:false,stepT:0,digT:0,ph:0},
+    J:{x:jx,y:jy,dir:'frente',state:'patrol',wpx:jx,wpy:jy,pause:2,last:{x:jx,y:jy},lost:0,cast:0,fireCd:5,stepT:0,wait:0,sleep:10,alert:0,slowT:0,ph:0,mv:false},
     T:{x:W*0.3,y:H*0.5,tx:W*0.3,ty:H*0.5,pause:2,right:false,timer:0},
     fires:[],pops:[],msg:{t:'',l:0},flash:0,shake:0,hbT:0,silentShown:false,warned:false,exitMsgT:0,prompt:false,dig:null
   };
@@ -408,6 +432,27 @@ function occluded(){
   return false;
 }
 
+/* ================= Animación de piernas y linterna ================= */
+const mAnim=()=>S.P.moving?{ph:S.P.ph,run:S.P.run,hip:0.66,lift:MH*0.05,ang:0.38}:null;
+const jAnim=()=>S.J.mv?{ph:S.J.ph,run:S.J.state==='chase',hip:0.5,lift:JH*0.04,ang:0.26}:null;
+// posición de la mano que sostiene la linterna según hacia dónde mira, y punta de la linterna
+function torchPos(time){
+  const P=S.P,d=P.dir;
+  const o=d==='frente'?[16,-44]:d==='espalda'?[-16,-44]:d==='izq'?[-3,-45]:[3,-45];
+  const bob=P.moving?Math.sin(time*(P.run?18:12))*2.5:0;
+  const hx=P.x+o[0],hy=P.y+o[1]+bob;
+  return {hx,hy,x:hx+Math.cos(P.ang)*17,y:hy+Math.sin(P.ang)*17};
+}
+function drawTorch(a,time){
+  const t=torchPos(time),P=S.P;
+  ctx.save();ctx.globalAlpha=a;ctx.translate(t.hx,t.hy);ctx.rotate(P.ang);
+  ctx.fillStyle='#2b2f38';ctx.fillRect(-5,-2.5,13,5);          // cuerpo
+  ctx.fillStyle='#4f5662';ctx.fillRect(-5,-2.5,13,1.4);        // brillo del metal
+  ctx.fillStyle='#9aa3b0';ctx.fillRect(8,-4,6,8);              // cabeza
+  ctx.fillStyle='#fff4c2';ctx.fillRect(13.5,-3.2,2,6.4);       // lente encendido
+  ctx.restore();
+}
+
 /* ================= Actualización ================= */
 function update(dt){
   const P=S.P,J=S.J,T=S.T;
@@ -441,6 +486,7 @@ function update(dt){
     P.x+=ix*sp*dt;P.y+=iy*sp*dt;
     P.ang=angLerp(P.ang,Math.atan2(iy,ix),Math.min(1,dt*10));
     P.dir=dirName(ix,iy);
+    P.ph+=dt*(P.run?11.6:7.5);
     P.stepT-=dt;if(P.stepT<=0){sStep(P.run?0.22:0.1);P.stepT=P.run?0.27:0.42;}
   }else{
     P.run=false;P.stam=Math.min(100,P.stam+24*dt);
@@ -539,6 +585,7 @@ function pickWp(){
 }
 function updateJuan(dt,inMata){
   const J=S.J,P=S.P,a=S.coins;
+  J.mv=false;
   const d=dist(J.x,J.y,P.x,P.y);
   // dormido al principio: no ve ni se mueve
   if(J.sleep>0){
@@ -591,6 +638,7 @@ function updateJuan(dt,inMata){
       const dx=tx-J.x,dy=ty-J.y,dd=Math.hypot(dx,dy);
       if(dd>2){
         J.x+=dx/dd*sp*dt;J.y+=dy/dd*sp*dt;J.dir=dirName(dx,dy);
+        J.mv=true;J.ph+=dt*(J.state==='chase'?10.5:6.3);
 
         J.stepT-=dt;
         if(J.stepT<=0){J.stepT=J.state==='chase'?0.3:0.5;if(d<520)sJuanStep(0.35*(1-d/520));}
@@ -676,9 +724,9 @@ function drawDark(cx,cy,sx,sy,time){
   dctx.fillStyle='rgba('+r+','+g+','+b+','+a+')';dctx.fillRect(0,0,dk.width,dk.height);
   dctx.globalCompositeOperation='destination-out';
   dctx.setTransform(Z,0,0,Z,-cx*Z+sx,-cy*Z+sy);
-  const lx=P.x,ly=P.y-MH*0.5,fl=0.95+Math.sin(time*23)*0.03+Math.sin(time*7.3)*0.02;
-  glow(lx,ly+20,80,0.55);                       // luz de luna / halo
-  cone(dctx,lx,ly,P.ang,0.42,340,0.95*fl);      // cono de linterna
+  const tp=torchPos(time),lx=tp.x,ly=tp.y,fl=0.95+Math.sin(time*23)*0.03+Math.sin(time*7.3)*0.02;
+  glow(P.x,P.y-MH*0.5+20,80,0.55);              // luz de luna / halo
+  cone(dctx,lx,ly,P.ang,0.42,340,0.95*fl);      // cono de linterna (sale de la mano)
   cone(dctx,lx,ly,P.ang,0.7,230,0.3*fl);        // borde suave
   for(const e of S.ent)if(!e.done)glow(e.x,e.y-8,34,0.2+0.1*Math.sin(time*3+e.x));
   glow(S.exit.x,S.exit.y-40,S.coins>=TOTAL?130:70,S.coins>=TOTAL?0.6:0.28);
@@ -731,12 +779,13 @@ function draw(time){
   list.push({y:J.y,f:()=>{
     ctx.save();ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.ellipse(J.x,J.y,20,7,0,0,7);ctx.fill();ctx.restore();
     const bob=(J.state==='chase')?Math.sin(time*14)*2:Math.sin(time*7)*1.2;
-    spr('juan_'+J.dir,J.x,J.y+bob,JH);
+    chr('juan_'+J.dir,J.x,J.y+bob,JH,null,ctx,jAnim());
     if(J.cast>0)spr('fuego',J.x,J.y-JH*0.4,56+Math.sin(time*30)*5);
   }});
   list.push({y:P.y,f:()=>{
     ctx.save();ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.ellipse(P.x,P.y,18,6,0,0,7);ctx.fill();ctx.restore();
-    spr('mascota_'+P.dir,P.x,P.y+pBob,MH,{a:pIn?0.8:1});
+    chr('mascota_'+P.dir,P.x,P.y+pBob,MH,{a:pIn?0.8:1},ctx,mAnim());
+    drawTorch(pIn?0.8:1,time);
   }});
   list.sort((a,b)=>a.y-b.y);
   for(const o of list)o.f();
@@ -748,7 +797,7 @@ function draw(time){
   // silueta de la mascota cuando queda tapada por una palma o una mata
   if(state==='play'&&occluded()){
     ctx.setTransform(Z,0,0,Z,-cx*Z+sx,-cy*Z+sy);
-    silhouette('mascota_'+P.dir,P.x,P.y+pBob,MH,'#37e6ff',0.6);
+    silhouette('mascota_'+P.dir,P.x,P.y+pBob,MH,'#37e6ff',0.6,mAnim());
   }
 
   /* ---- HUD (se adapta al ancho de la pantalla) ---- */
